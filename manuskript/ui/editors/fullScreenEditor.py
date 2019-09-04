@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 import os
-
+	
+from datetime import datetime
 from PyQt5.QtCore import Qt, QSize, QPoint, QRect, QEvent, QTime, QTimer
 from PyQt5.QtGui import QFontMetrics, QColor, QBrush, QPalette, QPainter, QPixmap, QCursor
 from PyQt5.QtGui import QIcon
@@ -12,7 +13,7 @@ from PyQt5.QtWidgets import QFrame, QWidget, QPushButton, qApp, QStyle, QComboBo
 from manuskript import settings
 from manuskript.enums import Outline
 from manuskript.models import outlineItem
-from manuskript.functions import allPaths, drawProgress
+from manuskript.functions import allPaths, drawProgress, mainWindow
 from manuskript.ui.editors.locker import locker
 from manuskript.ui.editors.themes import findThemePath, generateTheme, setThemeEditorDatas
 from manuskript.ui.editors.themes import loadThemeDatas
@@ -84,6 +85,24 @@ class fullScreenEditor(QWidget):
         self.btnClose.clicked.connect(self.leaveFullscreen)
         self.btnClose.setFlat(True)
 
+
+        # Custom Widgets
+        self.timerData = []
+        
+        self.btnToggleTimer = QPushButton(self)
+        self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPause))
+        self.btnToggleTimer.clicked.connect(self.toggleTimer)
+        self.btnToggleTimer.setFlat(True)
+
+        #self.btnStopTimer = QPushButton(self)
+        #self.btnStopTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaStop))
+        #self.btnStopTimer.clicked.connect(self.stopTimer)
+        #self.btnStopTimer.setFlat(True)
+
+        self.timerRunning = False
+        self.toggleTimer()
+        
+
         # Top panel Layout
         if self.btnSpellCheck:
             self.topPanel.layout().addWidget(self.btnSpellCheck)
@@ -91,6 +110,8 @@ class fullScreenEditor(QWidget):
         self.topPanel.layout().addWidget(self.btnPrevious)
         self.topPanel.layout().addWidget(self.btnNext)
         self.topPanel.layout().addWidget(self.btnNew)
+        self.topPanel.layout().addWidget(self.btnToggleTimer)
+        #self.topPanel.layout().addWidget(self.btnStopTimer)
 
         self.topPanel.layout().addStretch(1)
         self.topPanel.layout().addWidget(self.wPath)
@@ -176,6 +197,7 @@ class fullScreenEditor(QWidget):
         self.close()
 
     def leaveFullscreen(self):
+        self.stopTimer()
         self.showNormal()
         self.close()
 
@@ -472,7 +494,72 @@ class fullScreenEditor(QWidget):
             if last:
                 return last
         return None
+
+    def __pauseTimer(self, endTrigger="pause"):
+        if self._index:
+            item = self._index.internalPointer()
+        length = len(self.timerData)
+        if length > 0:
+            self.timerData[length - 1]["end"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.timerData[length - 1]["endWC"] = str(item.data(Outline.wordCount))
+            self.timerData[length - 1]["endTrigger"] = endTrigger
+
+    def toggleTimer(self):
+        if self._index:
+            item = self._index.internalPointer()
+            
+        if self.timerRunning:
+            self.timerRunning = False
+            self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPlay))
+            self.__pauseTimer("pause")
+        else:
+            self.timerRunning = True
+            self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPause))
+            self.timerData.append({
+                "start" : datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "startWC" : str(item.data(Outline.wordCount)),
+                "end" : "",
+                "endWC" : "",
+                "endTrigger" : ""
+            })     
+
+    def stopTimer(self):
+        self.timerRunning = False
+        self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPlay))
+        if self.timerRunning:
+            self.__pauseTimer("stop")
+        self.writeToOutput()
+
+    def writeToOutput(self):
+        mw = mainWindow()
+        project = mw.currentProject
+        projectFolder = os.path.dirname(project)
+
+        if len(self.timerData) == 0:
+            return
+        if not os.path.exists(projectFolder):
+            print("Statistics Plugin: Project directory could not be found.")
+            return
+        if not os.path.isfile(projectFolder + "/" + "stats.csv"):
+            with open(projectFolder + "/" + "stats.csv", "w") as output:
+                output.write("StartTime;StartCount;EndTime;EndCount;EndTrigger\n")
+
+        with open(projectFolder + "/" + "stats.csv", "a") as output:
+            for d in self.timerData:
+                output.write(
+                    d["start"] + ";" + 
+                    d["startWC"] + ";" + 
+                    d["end"] + ";" +
+                    d["endWC"] + ";" +
+                    d["endTrigger"] + "\n"
+                )
         
+
+
+
+###################################################################################
+# Inner Classes
+###################################################################################
 
 class myScrollBar(QScrollBar):
     def __init__(self, color=Qt.white, parent=None):
