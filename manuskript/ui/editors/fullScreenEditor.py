@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 import os
-	
+import time
+
 from datetime import datetime
 from PyQt5.QtCore import Qt, QSize, QPoint, QRect, QEvent, QTime, QTimer
 from PyQt5.QtGui import QFontMetrics, QColor, QBrush, QPalette, QPainter, QPixmap, QCursor
@@ -409,7 +410,9 @@ class fullScreenEditor(QWidget):
         item = self._index.internalPointer()
         previousItem = self.previousTextItem(item)
         if previousItem:
+            self.stopTimer("switch")
             self.setCurrentModelIndex(previousItem.index())
+            self.toggleTimer()
             return True
         return False
 
@@ -417,14 +420,18 @@ class fullScreenEditor(QWidget):
         item = self._index.internalPointer()
         nextItem = self.nextTextItem(item)
         if nextItem:
+            self.stopTimer("switch")
             self.setCurrentModelIndex(nextItem.index())
+            self.toggleTimer()
             return True
         return False
 
     def switchToItem(self, item):
         item = self.firstTextItem(item)
         if item:
+            self.stopTimer("switch")
             self.setCurrentModelIndex(item.index())
+            self.toggleTimer()
         
     def createNewText(self):
         item = self._index.internalPointer()
@@ -495,6 +502,16 @@ class fullScreenEditor(QWidget):
                 return last
         return None
 
+    def __getPathAsString(self, path):
+        res = path[1].title()
+        if len(path) < 3:
+            return res
+        for i in path[2:]:
+            res += i.title()
+            if i.isFolder():
+                res += " > " + i.title()
+        return res
+
     def __pauseTimer(self, endTrigger="pause"):
         if self._index:
             item = self._index.internalPointer()
@@ -503,11 +520,13 @@ class fullScreenEditor(QWidget):
             self.timerData[length - 1]["end"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.timerData[length - 1]["endWC"] = str(item.data(Outline.wordCount))
             self.timerData[length - 1]["endTrigger"] = endTrigger
+            self.timerData[length - 1]["pathToFile"] = self.__getPathAsString(self.wPath.getItemPath(item))
+            self.timerData[length - 1]["file"] = item.data(Outline.title)
 
     def toggleTimer(self):
         if self._index:
             item = self._index.internalPointer()
-            
+                    
         if self.timerRunning:
             self.timerRunning = False
             self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPlay))
@@ -516,20 +535,22 @@ class fullScreenEditor(QWidget):
             self.timerRunning = True
             self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPause))
             self.timerData.append({
+                "id" : str(int(time.mktime(datetime.now().timetuple()))),
                 "start" : datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "startWC" : str(item.data(Outline.wordCount)),
                 "end" : "",
                 "endWC" : "",
-                "endTrigger" : ""
+                "endTrigger" : "",
+                "pathToFile" : "",
+                "file" : ""
             })     
 
-    def stopTimer(self):
-        self.timerRunning = False
-        self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPlay))
+    def stopTimer(self, endTrigger="stop"):
         if self.timerRunning:
-            self.__pauseTimer("stop")
+            self.__pauseTimer(endTrigger)
+        self.timerRunning = False
         self.writeToOutput()
-
+        
     def writeToOutput(self):
         mw = mainWindow()
         project = mw.currentProject
@@ -542,16 +563,19 @@ class fullScreenEditor(QWidget):
             return
         if not os.path.isfile(projectFolder + "/" + "stats.csv"):
             with open(projectFolder + "/" + "stats.csv", "w") as output:
-                output.write("StartTime;StartCount;EndTime;EndCount;EndTrigger\n")
+                output.write("Id;StartTime;StartCount;EndTime;EndCount;EndTrigger;Path;FileName\n")
 
         with open(projectFolder + "/" + "stats.csv", "a") as output:
             for d in self.timerData:
                 output.write(
+                    d["id"] + ";" +
                     d["start"] + ";" + 
                     d["startWC"] + ";" + 
                     d["end"] + ";" +
                     d["endWC"] + ";" +
-                    d["endTrigger"] + "\n"
+                    d["endTrigger"] + ";" +
+                    d["pathToFile"] + ";" +
+                    d["file"] + "\n"
                 )
         
 
