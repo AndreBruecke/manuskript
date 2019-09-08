@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # --!-- coding: utf8 --!--
 import os
-import time
 
-from datetime import datetime
 from PyQt5.QtCore import Qt, QSize, QPoint, QRect, QEvent, QTime, QTimer
 from PyQt5.QtGui import QFontMetrics, QColor, QBrush, QPalette, QPainter, QPixmap, QCursor
 from PyQt5.QtGui import QIcon
@@ -21,6 +19,7 @@ from manuskript.ui.editors.themes import loadThemeDatas
 from manuskript.ui.views.MDEditView import MDEditView
 from manuskript.functions import Spellchecker
 
+from manuskript.addons.statistics import Statistics
 
 class fullScreenEditor(QWidget):
     def __init__(self, index, parent=None):
@@ -87,22 +86,8 @@ class fullScreenEditor(QWidget):
         self.btnClose.setFlat(True)
 
 
-        # Custom Widgets
-        self.timerData = []
-        
-        self.btnToggleTimer = QPushButton(self)
-        self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPause))
-        self.btnToggleTimer.clicked.connect(self.toggleTimer)
-        self.btnToggleTimer.setFlat(True)
-
-        #self.btnStopTimer = QPushButton(self)
-        #self.btnStopTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaStop))
-        #self.btnStopTimer.clicked.connect(self.stopTimer)
-        #self.btnStopTimer.setFlat(True)
-
-        self.timerRunning = False
-        self.toggleTimer()
-        
+        # Statistics Addon
+        self.statistics = Statistics(self, self._index, self.wPath)
 
         # Top panel Layout
         if self.btnSpellCheck:
@@ -111,8 +96,8 @@ class fullScreenEditor(QWidget):
         self.topPanel.layout().addWidget(self.btnPrevious)
         self.topPanel.layout().addWidget(self.btnNext)
         self.topPanel.layout().addWidget(self.btnNew)
-        self.topPanel.layout().addWidget(self.btnToggleTimer)
-        #self.topPanel.layout().addWidget(self.btnStopTimer)
+        
+        self.topPanel.layout().addWidget(self.statistics.btnToggleTimer)
 
         self.topPanel.layout().addStretch(1)
         self.topPanel.layout().addWidget(self.wPath)
@@ -194,11 +179,11 @@ class fullScreenEditor(QWidget):
 
     def __del__(self):
         # print("Leaving fullScreenEditor via Destructor event", flush=True)
-        self.showNormal()
+        #self.showNormal()
         self.close()
 
     def leaveFullscreen(self):
-        self.stopTimer()
+        self.statistics.stopTimer()
         self.showNormal()
         self.close()
 
@@ -410,9 +395,9 @@ class fullScreenEditor(QWidget):
         item = self._index.internalPointer()
         previousItem = self.previousTextItem(item)
         if previousItem:
-            self.stopTimer("switch")
+            self.statistics.stopTimer("switch")
             self.setCurrentModelIndex(previousItem.index())
-            self.toggleTimer()
+            self.statistics.toggleTimer()
             return True
         return False
 
@@ -420,18 +405,18 @@ class fullScreenEditor(QWidget):
         item = self._index.internalPointer()
         nextItem = self.nextTextItem(item)
         if nextItem:
-            self.stopTimer("switch")
+            self.statistics.stopTimer("switch")
             self.setCurrentModelIndex(nextItem.index())
-            self.toggleTimer()
+            self.statistics.toggleTimer()
             return True
         return False
 
     def switchToItem(self, item):
         item = self.firstTextItem(item)
         if item:
-            self.stopTimer("switch")
+            self.statistics.stopTimer("switch")
             self.setCurrentModelIndex(item.index())
-            self.toggleTimer()
+            self.statistics.toggleTimer()
         
     def createNewText(self):
         item = self._index.internalPointer()
@@ -502,88 +487,8 @@ class fullScreenEditor(QWidget):
                 return last
         return None
 
-    def __getPathAsString(self, path):
-        res = path[1].title()
-        if len(path) < 3:
-            return res
-        for i in path[2:]:
-            res += i.title()
-            if i.isFolder():
-                res += " > " + i.title()
-        return res
-
-    def __pauseTimer(self, endTrigger="pause"):
-        if self._index:
-            item = self._index.internalPointer()
-        length = len(self.timerData)
-        if length > 0:
-            self.timerData[length - 1]["end"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self.timerData[length - 1]["endWC"] = str(item.data(Outline.wordCount))
-            self.timerData[length - 1]["endTrigger"] = endTrigger
-            self.timerData[length - 1]["pathToFile"] = self.__getPathAsString(self.wPath.getItemPath(item))
-            self.timerData[length - 1]["file"] = item.data(Outline.title)
-
-    def toggleTimer(self):
-        if self._index:
-            item = self._index.internalPointer()
-                    
-        if self.timerRunning:
-            self.timerRunning = False
-            self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPlay))
-            self.__pauseTimer("pause")
-        else:
-            self.timerRunning = True
-            self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPause))
-            self.timerData.append({
-                "id" : str(int(time.mktime(datetime.now().timetuple()))),
-                "start" : datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "startWC" : str(item.data(Outline.wordCount)),
-                "end" : "",
-                "endWC" : "",
-                "endTrigger" : "",
-                "pathToFile" : "",
-                "file" : ""
-            })     
-
-    def stopTimer(self, endTrigger="stop"):
-        if self.timerRunning:
-            self.__pauseTimer(endTrigger)
-        self.timerRunning = False
-        self.writeToOutput()
-        
-    def writeToOutput(self):
-        mw = mainWindow()
-        project = mw.currentProject
-        projectFolder = os.path.dirname(project)
-
-        if len(self.timerData) == 0:
-            return
-        if not os.path.exists(projectFolder):
-            print("Statistics Plugin: Project directory could not be found.")
-            return
-        if not os.path.isfile(projectFolder + "/" + "stats.csv"):
-            with open(projectFolder + "/" + "stats.csv", "w") as output:
-                output.write("Id;StartTime;StartCount;EndTime;EndCount;EndTrigger;Path;FileName\n")
-
-        with open(projectFolder + "/" + "stats.csv", "a") as output:
-            for d in self.timerData:
-                output.write(
-                    d["id"] + ";" +
-                    d["start"] + ";" + 
-                    d["startWC"] + ";" + 
-                    d["end"] + ";" +
-                    d["endWC"] + ";" +
-                    d["endTrigger"] + ";" +
-                    d["pathToFile"] + ";" +
-                    d["file"] + "\n"
-                )
-        
 
 
-
-###################################################################################
-# Inner Classes
-###################################################################################
 
 class myScrollBar(QScrollBar):
     def __init__(self, color=Qt.white, parent=None):
