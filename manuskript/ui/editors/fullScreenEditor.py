@@ -85,7 +85,6 @@ class fullScreenEditor(QWidget):
         self.btnClose.clicked.connect(self.leaveFullscreen)
         self.btnClose.setFlat(True)
 
-
         # Statistics Addon
         self.statistics = Statistics(self, self._index, self.wPath)
 
@@ -179,6 +178,8 @@ class fullScreenEditor(QWidget):
 
     def __del__(self):
         # print("Leaving fullScreenEditor via Destructor event", flush=True)
+        if not self:
+            return
         #self.showNormal()
         self.close()
 
@@ -290,6 +291,7 @@ class fullScreenEditor(QWidget):
                 not self._locked:
             # print("Leaving fullScreenEditor via keyPressEvent", flush=True)
             self.showNormal()
+            self.statistics.stopTimer()
             self.close()
         elif (event.modifiers() & Qt.AltModifier) and \
                 event.key() in [Qt.Key_PageUp, Qt.Key_PageDown, Qt.Key_Left, Qt.Key_Right]:
@@ -341,6 +343,9 @@ class fullScreenEditor(QWidget):
             return
         if topLeft.row() <= self._index.row() <= bottomRight.row():
             self.updateStatusBar()
+        
+        item = self._index.internalPointer()
+        self.statistics.onInputUpdate(item.data(Outline.wordCount))
 
     def updateTopBar(self):
         item = self._index.internalPointer()
