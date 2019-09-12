@@ -25,6 +25,7 @@ class Statistics(object):
         self.writingStats = []
         self.__previousWC = 0
         self.timerRunning = False
+        self.statsFilename = "stats-testing.csv"
 
         self._index = index
         self.wPath = wPath
@@ -37,14 +38,14 @@ class Statistics(object):
         self.timerRunning = False
         self.toggleTimer()
 
-    def toggleTimer(self):
+    def toggleTimer(self, endTrigger="pause"):
         if self._index:
             item = self._index.internalPointer()
                     
         if self.timerRunning:
             self.timerRunning = False
             self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPlay))
-            self.__pauseTimer("pause")
+            self.__pauseTimer(endTrigger)
         else:
             self.timerRunning = True
             self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPause))
@@ -121,7 +122,7 @@ class Statistics(object):
         mw = mainWindow()
         project = mw.currentProject
         projectFolder = os.path.dirname(project)
-        outputFile = projectFolder + "/" + "stats.csv"
+        outputFile = projectFolder + "/" + self.statsFilename
 
         if len(self.writingStats) == 0:
             return
@@ -132,6 +133,7 @@ class Statistics(object):
             self.__createFile(outputFile)
 
         self.__appendWritingStatsToFile(outputFile)
+        self.writingStats = []
     
     def __getPathAsString(self, path):
         res = path[1].title()

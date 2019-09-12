@@ -1,0 +1,1 @@
+cmd /k C:\Python34\python "C:\Users\Andre\Documents\Projekte\Programmieren\Manuskript Custom\manuskript\bin\manuskript"

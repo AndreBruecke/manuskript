@@ -400,8 +400,10 @@ class fullScreenEditor(QWidget):
         item = self._index.internalPointer()
         previousItem = self.previousTextItem(item)
         if previousItem:
-            self.statistics.stopTimer("switch")
+            if self.statistics.timerRunning:
+                self.statistics.toggleTimer("switch")
             self.setCurrentModelIndex(previousItem.index())
+            self.statistics._index = self._index
             self.statistics.toggleTimer()
             return True
         return False
@@ -410,8 +412,10 @@ class fullScreenEditor(QWidget):
         item = self._index.internalPointer()
         nextItem = self.nextTextItem(item)
         if nextItem:
-            self.statistics.stopTimer("switch")
+            if self.statistics.timerRunning:
+                self.statistics.toggleTimer("switch")
             self.setCurrentModelIndex(nextItem.index())
+            self.statistics._index = self._index
             self.statistics.toggleTimer()
             return True
         return False
@@ -419,8 +423,10 @@ class fullScreenEditor(QWidget):
     def switchToItem(self, item):
         item = self.firstTextItem(item)
         if item:
-            self.statistics.stopTimer("switch")
+            if self.statistics.timerRunning:
+                self.statistics.toggleTimer("switch")
             self.setCurrentModelIndex(item.index())
+            self.statistics._index = self._index
             self.statistics.toggleTimer()
         
     def createNewText(self):
