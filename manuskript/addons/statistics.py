@@ -25,10 +25,14 @@ class Statistics(object):
         self.writingStats = []
         self.__previousWC = 0
         self.timerRunning = False
-        self.statsFilename = "stats-testing.csv"
+        self.statsFilename = "msk_stats"
 
         self._index = index
         self.wPath = wPath
+
+        # Wordcount difference for autosave
+        self.autosaveDiff = 250
+        self.totalDiff = 0
 
         self.btnToggleTimer = QPushButton(ui)
         self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPause))
@@ -38,14 +42,14 @@ class Statistics(object):
         self.timerRunning = False
         self.toggleTimer()
 
-    def toggleTimer(self, endTrigger="pause"):
+    def toggleTimer(self):
         if self._index:
             item = self._index.internalPointer()
                     
         if self.timerRunning:
             self.timerRunning = False
             self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPlay))
-            self.__pauseTimer(endTrigger)
+            self.__pauseTimer()
         else:
             self.timerRunning = True
             self.btnToggleTimer.setIcon(qApp.style().standardIcon(QStyle.SP_MediaPause))
@@ -57,16 +61,15 @@ class Statistics(object):
                 "endWC" : "",
                 "wordsAdded" : 0,
                 "wordsRemoved": 0,
-                "endTrigger" : "",
                 "pathToFile" : "",
                 "file" : ""
             })
             self.__previousWC = item.data(Outline.wordCount)
             print("Stats Addon > Started timer.")     
 
-    def stopTimer(self, endTrigger="stop"):
+    def stopTimer(self):
         if self.timerRunning:
-            self.__pauseTimer(endTrigger)
+            self.__pauseTimer()
         self.timerRunning = False
         self.__writeToOutput()
 
@@ -80,28 +83,36 @@ class Statistics(object):
             self.writingStats[len(self.writingStats) - 1]["wordsAdded"] += abs(diff)
         self.__previousWC = newWC
 
-    def __pauseTimer(self, endTrigger="pause"):
+        self.totalDiff += abs(diff)
+        if self.totalDiff >= self.autosaveDiff:
+            # Autosave
+            self.stopTimer()
+            self.toggleTimer()
+            self.totalDiff = 0
+
+    def __pauseTimer(self):
         if self._index:
             item = self._index.internalPointer()
         length = len(self.writingStats)
         if length > 0:
             self.writingStats[length - 1]["end"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.writingStats[length - 1]["endWC"] = str(item.data(Outline.wordCount))
-            self.writingStats[length - 1]["endTrigger"] = endTrigger
             self.writingStats[length - 1]["pathToFile"] = self.__getPathAsString(self.wPath.getItemPath(item))
             self.writingStats[length - 1]["file"] = item.data(Outline.title)
 
     def __createFile(self, outputFile):
         try:
-            with open(outputFile, "w") as output:
-                output.write("id;start_time;end_time;start_count;end_count;words_added;words_removed;end_trigger;path;fileName\n")
+            with open(outputFile + ".csv", "w") as output:
+                output.write("id;start_time;end_time;start_count;end_count;words_added;words_removed;path;fileName\n")
         except Exception as e:
             print("Stats Addon > ERROR > Could not create output file: " + str(e))
 
-    def __appendWritingStatsToFile(self, outputFile):
+    def __appendWritingStatsToFile(self, outputFile, attempt=1):
         try:
-            with open(outputFile, "a") as output:
+            with open(outputFile + ".csv", "a") as output:
                 for d in self.writingStats:
+                    if d["wordsAdded"] + d["wordsRemoved"] == 0:
+                        continue
                     output.write(
                         d["id"] + ";" +
                         d["start"] + ";" + 
@@ -110,13 +121,15 @@ class Statistics(object):
                         d["endWC"] + ";" +
                         str(d["wordsAdded"]) + ";" +
                         str(d["wordsRemoved"]) + ";" +
-                        d["endTrigger"] + ";" +
                         d["pathToFile"] + ";" +
                         d["file"] + "\n"
                     )
                 print("Stats Addon > Successfully wrote to output file.")
         except Exception as e:
-            print("Stats Addon > ERROR > Could not write to output file: " + str(e))
+            print("Stats Addon > ERROR > Could not write to output file (Attempt " + str(attempt) + "): " + str(e))
+            if attempt < 3:
+                self.__appendWritingStatsToFile(outputFile + "_tmp_" + datetime.now().strftime("%Y-%m-%d"), attempt=attempt+1)
+
 
     def __writeToOutput(self):
         mw = mainWindow()
@@ -129,7 +142,7 @@ class Statistics(object):
         if not os.path.exists(projectFolder):
             print("Stats Addon > ERROR > Project directory could not be found.")
             return
-        if not os.path.isfile(outputFile):
+        if not os.path.isfile(outputFile + ".csv"):
             self.__createFile(outputFile)
 
         self.__appendWritingStatsToFile(outputFile)
